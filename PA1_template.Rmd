@@ -8,18 +8,137 @@ output:
 
 ## Loading and preprocessing the data
 
+First, we load the data from the working directory
+
+```{r}
+unzip("activity.zip")
+data <- read.csv("activity.csv", stringsAsFactors=FALSE)
+
+```
+
+Then, we convert the dates into date format
+
+```{r}
+data$date <- as.Date(data$date)
+
+```
+
+The data then looks like this:
+
+```{r}
+head(data)
+```
 
 
 ## What is mean total number of steps taken per day?
+
+First we sum the data per day
+
+```{r}
+daydata <- aggregate(steps ~ date, data=data, FUN=sum)
+```
+
+Then generate a histogram of steps per day
+
+```{r}
+library(ggplot2)
+pl1 <- qplot(daydata$steps, geom="histogram", xlab = "Steps per day",  binwidth = 1000) 
+pl1
+```
+
+And calculate the mean and median of steps per day
+
+```{r}
+options(scipen=999, digits=2)
+meanperday <- mean(daydata$steps, na.rm=TRUE)
+medianperday <- median(daydata$steps, na.rm=TRUE)
+
+```
+The mean steps per day is `r meanperday`, and the median is `r medianperday`
 
 
 
 ## What is the average daily activity pattern?
 
 
+First, we take a mean of the steps per interval (averaging across days)
+
+```{r}
+intervaldata <- aggregate(steps ~ interval, data=data, FUN=mean)
+```
+
+Then, make a time series plot of this data
+```{r}
+qplot(intervaldata$interval, intervaldata$steps, geom="line", xlab = "Interval", ylab= "Average steps taken in each 5-minute interval")
+```
+
+Then, find the interval with the maximum number of steps
+```{r}
+intervalmax <- intervaldata$interval[intervaldata$steps== max(intervaldata$steps)]
+intervalmaxvalue <- max(intervaldata$steps)
+```
+
+The interval with the maximum average number of steps is `r intervalmax`, with an average of `r intervalmaxvalue` steps
+
 
 ## Imputing missing values
 
+There are quite a few rows with missing values:
+```{r}
+length(data[is.na(data)==TRUE])
+```
 
+Let's fill all of the NA values in with the median for the interval.
+
+I first create a lookup table for medians per interval
+
+```{r}
+lkp <- aggregate(steps ~ interval, data=data, FUN=median)
+```
+
+Then we create a new data frame called data2, with the interval and date columns, and for the steps column we:
+1. first check if the data is NA using is.na
+2. if it is, we take the value from the lkp data frame for that interval
+3. if it isn't, then we take the original value (data$steps)
+
+
+```{r}
+data2 <- data.frame(interval = data$interval, date = data$date,
+                    steps = ifelse (is.na(data$steps),
+                                    (lkp$steps[lkp$interval == data$interval]),
+                                    data$steps))
+```
+
+Then we take the same steps as we did on the original data, to aggregate, calculate the mean and median of steps per day, and generate a histogram of steps per day, that I show below the original data
+
+```{r}
+daydata2 <- aggregate(steps ~ date, data=data2, FUN=sum)
+meanperday2 <- mean(daydata2$steps, na.rm=TRUE)
+medianperday2 <- median(daydata2$steps, na.rm=TRUE)
+pl2 <- qplot(daydata2$steps, geom="histogram", xlab = "Steps per day (corrected data)", binwidth = 1000) 
+library(gridExtra)
+grid.arrange(pl1, pl2, nrow=2)
+```
+
+The mean steps per day with this corrected data is `r meanperday2` (compared to `r meanperday`), and the median is `r medianperday2` (compared to `r medianperday2`).
+So, the data does look slightly different, but not drastically.
+
+This can be partially explained because the na data was only for 8 out of the 61 days. 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First, I add in an additional column for whether the data is for a weekday or a weekend
+
+```{r}
+data$weekday <- "Weekday"
+data$weekday[weekdays(data$date) %in% c("Saturday", "Sunday")] <- "Weekend"
+data$weekday <- factor(data$weekday)
+```
+
+and then generate a time series plot
+
+```{r}
+intervaldata2 <- aggregate(steps ~ interval + weekday, data=data, FUN=mean)
+plot <- ggplot(intervaldata2, aes(x=interval, y=steps, weekday)) + geom_line(color="darkblue") + facet_grid (weekday ~ .) + labs(title= "Average number of steps per interval: weekdays compared to weekends", x="5 minute interval")
+plot
+```
